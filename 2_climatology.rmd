@@ -1,0 +1,178 @@
+---
+title: "Calculate climatology"
+output: html_document
+---
+
+load library
+```{r}
+library(bigleaf)
+library(tidyverse)
+library(RNetCDF)
+library(fields)
+
+```
+
+list of models and variables
+```{r}
+### list of models we use:
+list_models_common <- c('ACCESS-CM2', 'AWI-CM-1-1-MR','CanESM5-CanOE','CESM2','CMCC-CM2-SR5','CMCC-ESM2',
+												'CNRM-CM6-1',	'CNRM-ESM2-1','E3SM-1-1','FGOALS-f3-L','FGOALS-g3',	'FIO-ESM-2-0', 'GFDL-ESM4',
+												'HadGEM3-GC31-LL','HadGEM3-GC31-MM','INM-CM4-8','INM-CM5-0',	'IPSL-CM6A-LR','KACE-1-0-G',
+												'MIROC6','MIROC-ES2L','MPI-ESM1-2-LR','MRI-ESM2-0','NorESM2-MM','TaiESM1','UKESM1-0-LL')
+
+### Variables we read:
+list_var <- c("pr","tas","ps", "huss", "sfcWind","hfss", "hfls")
+
+```
+
+# Calculate climatology for historical period
+
+```{r}
+# set direction of downloaded data
+getwd()
+setwd("..")
+setwd("./CMIP6_data/netcdf")
+getwd()
+
+#netcdf files
+ls <- list.files()
+ls <- ls[which(str_ends(ls,".nc"))]
+
+
+# model
+for (m in c(1:length(list_models_common))){
+	print(list_models_common[m])
+	
+# open downloaded data
+for(v in 1:length(list_var)){
+	ls_temp <- ls[which(str_starts(ls,list_var[v]))]
+	file_name <- ls_temp[which(str_detect(ls_temp,paste0(list_models_common[m],"_historical")))]
+	data <- open.nc(file_name)
+	variable <- var.get.nc(data, list_var[v])
+	assign(list_var[v], variable) 
+	close.nc(data); rm(variable, ls_temp, file_name)  
+}
+	
+############################## Calculating variables
+Lv <- (2.501 - 0.00237*(tas - 273.15))*1000000 #in J/Kg (from bigleaf)
+Lv0 <- Lv/1000/1000
+#### esat:
+constants = bigleaf.constants()
+a <- 610.8
+b <- 17.27
+c <- 237.3
+vpsat <- a * exp((b * (tas - 273.15))/(c + (tas - 273.15))) * constants$Pa2kPa
+qsat <- constants$eps * vpsat/(ps/1000 - (1 - constants$eps) * vpsat)
+vp <- huss * ps/1000/((1 - constants$eps) * huss + constants$eps)
+rh <- huss/qsat
+RH <- vp/vpsat
+D <- vpsat - vp
+s <- Lv*qsat/(constants$Rv*tas^2)
+gamma <- constants$cp/Lv
+s0 <- vpsat*4098/(((tas-273.15)+237.3)^2)
+gamma0 <- 1.013e-3/(Lv0*0.622) * (ps/1000)
+u <- sfcWind*0.75
+AE <- hfls + hfss
+	
+### PE and SFE
+PE <- (s0/(s0+gamma0)*AE*0.0864 + gamma0/(s0+gamma0)*6.43*(1+0.536*u)*D)/Lv0 # PE in mm/day
+#SFE <- rh*s/(rh*s+gamma)*AE/Lv 
+SFE <- RH*s0/(RH*s0+gamma0)*AE/Lv
+	
+### climatology
+PE_climate <- apply(PE[,,],c(1,2), mean, na.rm=T)
+SFE_climate <- apply(SFE[,,],c(1,2), mean, na.rm=T)
+pr_climate <- apply(pr[,,],c(1,2), mean, na.rm=T)
+
+# unit kg/m2/s -> mm/year
+PE_climate <- PE_climate * 365
+SFE_climate <- SFE_climate  * 60 * 60 * 24 * 365
+pr_climate <- pr_climate  * 60 * 60 * 24 * 365
+
+# saving data
+save(PE_climate, file=paste("./PE_climate_",list_models_common[m],"_historical.RData", sep=""))
+save(SFE_climate, file=paste("./SFE_climate",list_models_common[m],"_historical.RData", sep=""))
+save(pr_climate, file=paste("./pr_climate",list_models_common[m],"_historical.RData", sep=""))
+
+
+
+}
+
+```
+
+# Calculate climatology for future period
+
+```{r}
+# set direction of downloaded data
+getwd()
+setwd("..")
+setwd("./CMIP6_data/netcdf")
+getwd()
+
+#netcdf files
+ls <- list.files()
+ls <- ls[which(str_ends(ls,".nc"))]
+
+
+# model
+for (m in c(1:length(list_models_common))){
+	print(list_models_common[m])
+	
+# open downloaded data
+for(v in 1:length(list_var)){
+	ls_temp <- ls[which(str_starts(ls,list_var[v]))]
+	file_name <- ls_temp[which(str_detect(ls_temp,paste0(list_models_common[m],"_ssp585")))]
+	data <- open.nc(file_name)
+	variable <- var.get.nc(data, list_var[v])
+	assign(list_var[v], variable) 
+	close.nc(data); rm(variable, ls_temp, file_name)  
+}
+	
+############################## Calculating variables
+Lv <- (2.501 - 0.00237*(tas - 273.15))*1000000 #in J/Kg (from bigleaf)
+Lv0 <- Lv/1000/1000 # MJ/kg
+#### esat:
+constants = bigleaf.constants()
+a <- 610.8
+b <- 17.27
+c <- 237.3
+vpsat <- a * exp((b * (tas - 273.15))/(c + (tas - 273.15))) * constants$Pa2kPa
+qsat <- constants$eps * vpsat/(ps/1000 - (1 - constants$eps) * vpsat)
+vp <- huss * ps/1000/((1 - constants$eps) * huss + constants$eps)
+rh <- huss/qsat
+RH <- vp/vpsat
+D <- vpsat - vp
+s <- Lv*qsat/(constants$Rv*tas^2)
+gamma <- constants$cp/Lv
+s0 <- vpsat*4098/(((tas-273.15)+237.3)^2)
+gamma0 <- 1.013e-3/(Lv0*0.622) * (ps/1000)
+u <- sfcWind*0.75
+AE <- hfls + hfss
+	
+### PE and SFE
+PE <- (s0/(s0+gamma0)*AE*0.0864 + gamma0/(s0+gamma0)*6.43*(1+0.536*u)*D)/Lv0 # PE in mm/day
+#SFE <- rh*s/(rh*s+gamma)*AE/Lv 
+SFE <- RH*s0/(RH*s0+gamma0)*AE/Lv
+	
+### climatology
+PE_climate <- apply(PE[,,],c(1,2), mean, na.rm=T)
+SFE_climate <- apply(SFE[,,],c(1,2), mean, na.rm=T)
+pr_climate <- apply(pr[,,],c(1,2), mean, na.rm=T)
+
+# unit kg/m2/s -> mm/year
+PE_climate <- PE_climate * 365
+SFE_climate <- SFE_climate  * 60 * 60 * 24 * 365
+pr_climate <- pr_climate  * 60 * 60 * 24 * 365
+
+# saving data
+save(PE_climate, file=paste("./PE_climate_",list_models_common[m],"_ssp585.RData", sep=""))
+save(SFE_climate, file=paste("./SFE_climate",list_models_common[m],"_ssp585.RData", sep=""))
+save(pr_climate, file=paste("./pr_climate",list_models_common[m],"_ssp585.RData", sep=""))
+
+
+}
+
+
+
+```
+

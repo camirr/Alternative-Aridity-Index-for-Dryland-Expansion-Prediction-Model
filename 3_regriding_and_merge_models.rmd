@@ -1,0 +1,320 @@
+---
+title: "3_regriding_and_merge_models"
+output: html_document
+---
+
+Load library
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(bigleaf)
+library(tidyverse)
+library(RNetCDF)
+library(fields)
+library(akima)
+
+```
+
+# List of models
+```{r}
+### list of models we use:
+list_models_common <- c('ACCESS-CM2', 'AWI-CM-1-1-MR','CanESM5-CanOE','CESM2','CMCC-CM2-SR5','CMCC-ESM2',
+												'CNRM-CM6-1',	'CNRM-ESM2-1','E3SM-1-1','FGOALS-f3-L','FGOALS-g3',	'FIO-ESM-2-0', 'GFDL-ESM4',
+												'HadGEM3-GC31-LL','HadGEM3-GC31-MM','INM-CM4-8','INM-CM5-0',	'IPSL-CM6A-LR','KACE-1-0-G',
+												'MIROC6','MIROC-ES2L','MPI-ESM1-2-LR','MRI-ESM2-0','NorESM2-MM','TaiESM1','UKESM1-0-LL')
+
+### list of models providing land mask
+list_models_sftlf <- c('ACCESS-CM2','ACCESS-ESM1-5', 'AWI-CM-1-1-MR','AWI-ESM-1-1-LR', 'CanESM5','CanESM5-CanOE',
+											 'CESM2','CESM2-FV2','CESM2-WACCM','CESM2-WACCM-FV2','CMCC-CM2-HR4','CMCC-CM2-SR5','CMCC-ESM2',
+											 'EC-Earth3-AerChem', 'EC-Earth3-Veg-LR','FGOALS-g3','INM-CM4-8','INM-CM5-0','MIROC6',
+											 'MIROC-ES2L','MPI-ESM1-2-HR','MPI-ESM1-2-LR','MRI-ESM2-0','NorCPM1','SAM0-UNICON','TaiESM1')
+
+list_models_sftlf_common <- list_models_sftlf[which(list_models_sftlf %in% list_models_common)]
+
+
+```
+
+
+# Land mask
+```{r}
+# set direction of downloaded data
+getwd()
+setwd("..")
+setwd("./CMIP6_data/netcdf")
+getwd()
+
+ls <- list.files()
+ls <- ls[which(str_ends(ls,".nc"))]
+ls <- ls[which(str_starts(ls,"sftlf"))]
+
+for (m in 1:length(ls)){
+	print(ls[m])
+	data <-  open.nc(ls)
+	lat <- var.get.nc(data, "lat")
+	lon<- var.get.nc(data, "lon")
+	mask  <- var.get.nc(data, "sftlf")
+	if (max(mask, na.rm=T) == 100) {mask <- mask/100}
+	mask[which(mask < 0.99)] <-  NA
+	assign(paste("lat_", list_models_sftlf_common[m], sep=""), lat)
+	assign(paste("lon_", list_models_sftlf_common[m], sep=""), lon)
+	close.nc(data)
+
+	lowlat <- min(which(lat > -60))
+	mask[,1:lowlat]<- NA
+	## let's define Greenland
+	mask_greenland <- array(1, dim=c(length(lon), length(lat)))
+	for (i in 1:length(lon)){
+		for (j in 1:length(lat)){
+			if ( ( lat[j] > 60) && (lon[i] > 360-60) && ( lon[i] < 335 )) {mask_greenland[i,j] <- NA }
+			if ( ( lat[j] > 66) && (lon[i] > 360-60) && ( lon[i] < 355 )) {mask_greenland[i,j] <- NA }
+			if ( ( lat[j] > 70) && (lon[i] > 360-70) && ( lon[i] < 355 )) {mask_greenland[i,j] <- NA }
+		}
+	}
+
+	mask <- mask * mask_greenland
+	assign(paste("mask_",list_models_sftlf_common[m], sep=""),mask)
+	rm(mask);rm(lat);rm(lon); rm(lowlat);rm(mask_greenland)
+}
+
+
+#### Mask on 2x2
+for (m in 1:length(list_models_sftlf_common)){
+	if(m==1){
+		buff <- get(paste("mask_",list_models_sftlf_common[m], sep=""))
+		buff[which(is.na(buff))]<- 0
+		mask_2x2 <- bicubic.grid(x=get(paste("lon_",list_models_sftlf_common[m], sep="")),
+														 y=get(paste("lat_",list_models_sftlf_common[m], sep="")),
+														 z=buff,
+														 xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)
+		mask_2x2_NAs <- mask_2x2$z
+		mask_2x2_NAs[which(mask_2x2_NAs==0)] <- NA
+		mask_2x2_NAs[which(mask_2x2_NAs < 0.0)] <- NA
+		mask_2x2_NAs[which(mask_2x2_NAs > 0.0)] <- 1
+		
+		
+	} else {
+		buff <- get(paste("mask_",list_models_sftlf_common[m], sep=""))
+		buff[which(is.na(buff))]<- 0
+		mask_2x2 <- bicubic.grid(x=get(paste("lon_",list_models_sftlf_common[m], sep="")),
+														 y=get(paste("lat_",list_models_sftlf_common[m], sep="")),
+														 z=buff,
+														 xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)
+		temp <- mask_2x2$z
+		temp[which(temp==0)] <- NA
+		temp[which(temp < 0.0)] <- NA
+		temp[which(temp >= 0.0)] <- 1
+		
+		mask_2x2_NAs <- mask_2x2_NAs * temp
+	}
+}
+
+image.plot(mask_2x2_NAs)
+
+```
+
+# import climatology
+```{r}
+
+# set direction of downloaded data
+getwd()
+setwd("..")
+setwd("./CMIP6_data/netcdf")
+getwd()
+
+
+### historical
+for (m in 1:length(list_models_common)){
+	# pr
+	load(paste("./pr_climate",list_models_common[m],"_historical.RData", sep=""))
+	assign(paste("pr_climate_",list_models_common[m],"_historical",sep=""), pr_climate)
+	
+	# PE
+	load(paste("./PE_climate_",list_models_common[m],"_historical.RData", sep=""))
+	assign(paste("PE_climate_",list_models_common[m],"_historical",sep=""), PE_climate)
+
+	# SFE
+	load(paste("./SFE_climate",list_models_common[m],"_historical.RData", sep=""))
+	assign(paste("SFE_climate_",list_models_common[m],"_historical",sep=""), SFE_climate)
+
+
+	rm(pr_climate, PE_climate, SFE_climate)
+}
+
+### future
+for (m in 1:length(list_models_common)){
+	# pr
+	load(paste("./pr_climate",list_models_common[m],"_ssp585.RData", sep=""))
+	assign(paste("pr_climate_",list_models_common[m],"_ssp585",sep=""), pr_climate)
+	
+	# PE
+	load(paste("./PE_climate_",list_models_common[m],"_ssp585.RData", sep=""))
+	assign(paste("PE_climate_",list_models_common[m],"_ssp585",sep=""), PE_climate)
+
+	# SFE
+	load(paste("./SFE_climate",list_models_common[m],"_ssp585.RData", sep=""))
+	assign(paste("SFE_climate_",list_models_common[m],"_ssp585",sep=""), SFE_climate)
+
+
+	rm(pr_climate, PE_climate, SFE_climate)
+}
+
+image.plot(`pr_climate_ACCESS-CM2_historical`)
+image.plot(`PE_climate_ACCESS-CM2_historical`)
+image.plot(`SFE_climate_ACCESS-CM2_historical`)
+
+```
+
+# regridding
+```{r}
+# lat, lon extraction for regridding
+getwd()
+setwd("..")
+setwd("./CMIP6_data/netcdf")
+getwd()
+ls <- list.files()
+ls <- ls[which(str_ends(ls,".nc"))]
+ls <- ls[which(str_starts(ls,"pr"))]
+ls <- ls[which(str_detect(ls,"ssp585"))]
+
+for(m in c(1:length(list_models_common))){
+	file_name <- ls[which(str_detect(ls,paste0(list_models_common[m],"_ssp585")))]
+	data <- open.nc(file_name)
+	
+	lat <- var.get.nc(data, "lat")
+	lon <- var.get.nc(data, "lon")
+	assign(paste("lat_", list_models_common[m], sep=""), lat) 
+	assign(paste("lon_", list_models_common[m], sep=""), lon) 
+	close.nc(data)
+}
+
+
+### historical
+for (m in 1:length(list_models_common)){
+	lat <- get(paste("lat_", list_models_common[m], sep=""))
+	lon <- get(paste("lon_", list_models_common[m], sep="")) 
+	
+	pr <- get( paste("pr_climate_",list_models_common[m],"_historical", sep="")) 
+	pr_2x2 <- bicubic.grid(lon, lat, pr, xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)$z 
+	assign(paste("pr_climate_",list_models_common[m],"_historical_2x2", sep=""), pr_2x2)
+	
+	PE <- get( paste("PE_climate_",list_models_common[m],"_historical", sep="")) 
+	PE_2x2 <- bicubic.grid(lon, lat, PE, xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)$z 
+	assign(paste("PE_climate_",list_models_common[m],"_historical_2x2", sep=""), PE_2x2)
+	
+	SFE <- get( paste("SFE_climate_",list_models_common[m],"_historical", sep="")) 
+	SFE_2x2 <- bicubic.grid(lon, lat, SFE, xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)$z 
+	assign(paste("SFE_climate_",list_models_common[m],"_historical_2x2", sep=""), SFE_2x2)
+}
+
+### future
+for (m in 1:length(list_models_common)){
+	lat <- get(paste("lat_", list_models_common[m], sep=""))
+	lon <- get(paste("lon_", list_models_common[m], sep="")) 
+	
+	pr <- get( paste("pr_climate_",list_models_common[m],"_ssp585", sep="")) 
+	pr_2x2 <- bicubic.grid(lon, lat, pr, xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)$z 
+	assign(paste("pr_climate_",list_models_common[m],"_ssp585_2x2", sep=""), pr_2x2)
+	
+	PE <- get( paste("PE_climate_",list_models_common[m],"_ssp585", sep="")) 
+	PE_2x2 <- bicubic.grid(lon, lat, PE, xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)$z 
+	assign(paste("PE_climate_",list_models_common[m],"_ssp585_2x2", sep=""), PE_2x2)
+	
+	SFE <- get( paste("SFE_climate_",list_models_common[m],"_ssp585", sep="")) 
+	SFE_2x2 <- bicubic.grid(lon, lat, SFE, xlim=c(0,360), ylim=c(-90,90), dx=2, dy=2)$z 
+	assign(paste("SFE_climate_",list_models_common[m],"_ssp585_2x2", sep=""), SFE_2x2)
+}
+
+image.plot(`pr_climate_ACCESS-CM2_historical_2x2`)
+image.plot(`PE_climate_ACCESS-CM2_historical_2x2`)
+image.plot(`SFE_climate_ACCESS-CM2_historical_2x2`)
+
+```
+
+# Let's put all models in a matrix, multiply land mask, and calculate aridity index
+```{r}
+
+#### historical
+# empty matrix
+pr_climate_historical_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+PE_climate_historical_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+SFE_climate_historical_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+AI_climate_historical_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+NAI_climate_historical_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+
+# loop
+for (m in 1:length(list_models_common)){
+	
+	temp <- get(paste("pr_climate_",list_models_common[m],"_historical_2x2", sep=""))
+	pr_climate_historical_2x2_allmodels[,,m] <- temp*mask_2x2_NAs
+	
+	temp <- get(paste("PE_climate_",list_models_common[m],"_historical_2x2", sep=""))
+	PE_climate_historical_2x2_allmodels[,,m] <- temp*mask_2x2_NAs
+	
+	temp <- get(paste("SFE_climate_",list_models_common[m],"_historical_2x2", sep=""))
+	SFE_climate_historical_2x2_allmodels[,,m] <- temp*mask_2x2_NAs
+	
+	# aridity index
+	AI_climate_historical_2x2_allmodels[,,m] <- pr_climate_historical_2x2_allmodels[,,m]/PE_climate_historical_2x2_allmodels[,,m]
+	NAI_climate_historical_2x2_allmodels[,,m] <- pr_climate_historical_2x2_allmodels[,,m]/SFE_climate_historical_2x2_allmodels[,,m]
+	
+	rm(temp)
+}
+
+#### future
+# empty matrix
+pr_climate_ssp585_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+PE_climate_ssp585_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+SFE_climate_ssp585_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+AI_climate_ssp585_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+NAI_climate_ssp585_2x2_allmodels <- array(NA, dim=c(181,91,length(list_models_common)))
+
+# loop
+for (m in 1:length(list_models_common)){
+	
+	temp <- get(paste("pr_climate_",list_models_common[m],"_ssp585_2x2", sep=""))
+	pr_climate_ssp585_2x2_allmodels[,,m] <- temp*mask_2x2_NAs
+	
+	temp <- get(paste("PE_climate_",list_models_common[m],"_ssp585_2x2", sep=""))
+	PE_climate_ssp585_2x2_allmodels[,,m] <- temp*mask_2x2_NAs
+	
+	temp <- get(paste("SFE_climate_",list_models_common[m],"_ssp585_2x2", sep=""))
+	SFE_climate_ssp585_2x2_allmodels[,,m] <- temp*mask_2x2_NAs
+	
+	# aridity index
+	AI_climate_ssp585_2x2_allmodels[,,m] <- pr_climate_ssp585_2x2_allmodels[,,m]/PE_climate_ssp585_2x2_allmodels[,,m]
+	NAI_climate_ssp585_2x2_allmodels[,,m] <- pr_climate_ssp585_2x2_allmodels[,,m]/SFE_climate_ssp585_2x2_allmodels[,,m]
+	
+	rm(temp)
+}
+
+image.plot(pr_climate_historical_2x2_allmodels[,,1])
+image.plot(PE_climate_historical_2x2_allmodels[,,1])
+image.plot(SFE_climate_historical_2x2_allmodels[,,1])
+image.plot(log(AI_climate_historical_2x2_allmodels[,,1]))
+image.plot(log(NAI_climate_historical_2x2_allmodels[,,1]))
+
+```
+
+# save data
+```{r}
+# creating folder
+dir.create("analysis_ready_data")
+
+# saving data
+save(pr_climate_historical_2x2_allmodels, file="./analysis_ready_data/pr_climate_historical_2x2_allmodels.RData")
+save(PE_climate_historical_2x2_allmodels, file="./analysis_ready_data/PE_climate_historical_2x2_allmodels.RData")
+save(SFE_climate_historical_2x2_allmodels, file="./analysis_ready_data/SFE_climate_historical_2x2_allmodels.RData")
+save(AI_climate_historical_2x2_allmodels, file="./analysis_ready_data/AI_climate_historical_2x2_allmodels.RData")
+save(NAI_climate_historical_2x2_allmodels, file="./analysis_ready_data/NAI_climate_historical_2x2_allmodels.RData")
+
+save(pr_climate_ssp585_2x2_allmodels, file="./analysis_ready_data/pr_climate_ssp585_2x2_allmodels.RData")
+save(PE_climate_ssp585_2x2_allmodels, file="./analysis_ready_data/PE_climate_ssp585_2x2_allmodels.RData")
+save(SFE_climate_ssp585_2x2_allmodels, file="./analysis_ready_data/SFE_climate_ssp585_2x2_allmodels.RData")
+save(AI_climate_ssp585_2x2_allmodels, file="./analysis_ready_data/AI_climate_ssp585_2x2_allmodels.RData")
+save(NAI_climate_ssp585_2x2_allmodels, file="./analysis_ready_data/NAI_climate_ssp585_2x2_allmodels.RData")
+
+save(mask_2x2_NAs,file="./analysis_ready_data/mask_2x2_NAs.RData")
+save(mask_2x2,file="./analysis_ready_data/mask_2x2.RData")
+```
+
+

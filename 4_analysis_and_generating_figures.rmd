@@ -1,0 +1,221 @@
+---
+title: "4_analysis_and_generating_figures"
+output: html_document
+---
+
+#load library
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(bigleaf)
+library(tidyverse)
+library(RNetCDF)
+library(fields)
+library(akima)
+library(RColorBrewer)
+library(maps)
+
+```
+
+
+# list of models
+```{r}
+### list of models we use:
+list_models_common <- c('ACCESS-CM2', 'AWI-CM-1-1-MR','CanESM5-CanOE','CESM2','CMCC-CM2-SR5','CMCC-ESM2',
+												'CNRM-CM6-1',	'CNRM-ESM2-1','E3SM-1-1','FGOALS-f3-L','FGOALS-g3',	'FIO-ESM-2-0', 'GFDL-ESM4',
+												'HadGEM3-GC31-LL','HadGEM3-GC31-MM','INM-CM4-8','INM-CM5-0',	'IPSL-CM6A-LR','KACE-1-0-G',
+												'MIROC6','MIROC-ES2L','MPI-ESM1-2-LR','MRI-ESM2-0','NorESM2-MM','TaiESM1','UKESM1-0-LL')
+```
+
+
+
+#load data
+```{r}
+load("./analysis_ready_data/AI_climate_historical_2x2_allmodels.RData")
+load("./analysis_ready_data/NAI_climate_historical_2x2_allmodels.RData")
+load("./analysis_ready_data/pr_climate_historical_2x2_allmodels.RData")
+load("./analysis_ready_data/PE_climate_historical_2x2_allmodels.RData")
+load("./analysis_ready_data/SFE_climate_historical_2x2_allmodels.RData")
+
+load("./analysis_ready_data/AI_climate_ssp585_2x2_allmodels.RData")
+load("./analysis_ready_data/NAI_climate_ssp585_2x2_allmodels.RData")
+load("./analysis_ready_data/pr_climate_ssp585_2x2_allmodels.RData")
+load("./analysis_ready_data/SFE_climate_ssp585_2x2_allmodels.RData")
+load("./analysis_ready_data/PE_climate_ssp585_2x2_allmodels.RData")
+
+load("./analysis_ready_data/mask_2x2_NAs.RData")
+load("./analysis_ready_data/mask_2x2.RData")
+```
+
+#cos weigth
+```{r}
+## 2X2 cos weight: this can be used to calculate global mean
+lat <- seq(from = -90, to = 90, by = 2)
+weight <- cos(lat  * (pi/180))
+w <- t(array(weight,dim = c(91,181)))
+weight <- w/sum(w)
+image.plot(weight)
+
+```
+
+### From now on, you need to analyze data on your own
+example 1: AI and NAI maps with dryland classification line (0.65 for AI, 1 for NAI)
+example 2: comparison between AI and NAI 
+example 3: Future dryland fraction - historical dryland fraction (for AI and NAI. then compare. statistical analysis)
+
+I recommend referring to Berg & McColl (2021) and their r code.
+paper: https://doi.org/10.1038/s41558-021-01007-8
+code: https://doi.org/10.5281/zenodo.4490414
+
+
+AI dryland
+```{r}
+## historical
+mean_AI <- apply(AI_climate_historical_2x2_allmodels, c(1, 2), mean, na.rm=T)
+
+## Lon/Lat and mask on 2x2:
+lat <- mask_2x2$y
+lon <-  mask_2x2$x
+lowlat <- min(which(lat > -60));highlat <- min(which(lat > 80)); mask <- mask_2x2_NAs
+
+##
+lowlat <- min(which(lat > -60)); 
+highlat <- min(which(lat > 80))
+
+bob <- mean_AI; bob[bob >4 ] <- 4;
+image.plot(lon-180, lat[lowlat:highlat], bob[ c( (length(lon)/2+1):length(lon),
+1:(length(lon)/2)),lowlat:highlat],  zlim=c(0,4),col=brewer.pal(8, "YlGnBu"), breaks=seq(0,4,by=0.5),
+xlab="", ylab="", xaxt="n", yaxt="n", axis.args=list(cex.axis=1.5), cex.main=1.9,main="Mean AI and drylands");
+map(add=T,interior=F)
+bob[is.na(bob)==T] <- 1000
+contour(seq(-180,180, length.out=180), seq(lat[lowlat],lat[highlat],length.out=length(lowlat:highlat)),
+bob[ c( (length(lon)/2+1):length(lon), 1:(length(lon)/2)),lowlat:highlat],levels=c(0.5,0.65),
+ col=c("orange","darkred"), lwd=1, add=T, drawlabels=F); 
+map(add=T,interior=F)
+#legend("bottomleft", col=c("orange", "darkred"), c("AI=0.5", "AI=0.65"), bty="n", lwd=1.2, cex=1.6)
+mtext("a", side=3, adj=0, line=1, cex=1.5, font=2)
+
+
+## future
+mean_AI <- apply(AI_climate_ssp585_2x2_allmodels, c(1, 2), mean, na.rm=T)
+
+## Lon/Lat and mask on 2x2:
+lat <- mask_2x2$y
+lon <-  mask_2x2$x
+lowlat <- min(which(lat > -60));highlat <- min(which(lat > 80)); mask <- mask_2x2_NAs
+
+##
+lowlat <- min(which(lat > -60)); 
+highlat <- min(which(lat > 80))
+
+bob <- mean_AI; bob[bob >4 ] <- 4;
+image.plot(lon-180, lat[lowlat:highlat], bob[ c( (length(lon)/2+1):length(lon),
+1:(length(lon)/2)),lowlat:highlat],  zlim=c(0,4),col=brewer.pal(8, "YlGnBu"), breaks=seq(0,4,by=0.5),
+xlab="", ylab="", xaxt="n", yaxt="n", axis.args=list(cex.axis=1.5), cex.main=1.9,main="Mean AI and drylands");
+map(add=T,interior=F)
+bob[is.na(bob)==T] <- 1000
+contour(seq(-180,180, length.out=180), seq(lat[lowlat],lat[highlat],length.out=length(lowlat:highlat)),
+bob[ c( (length(lon)/2+1):length(lon), 1:(length(lon)/2)),lowlat:highlat],levels=c(0.5,0.65),
+ col=c("orange","darkred"), lwd=1, add=T, drawlabels=F); 
+map(add=T,interior=F)
+#legend("bottomleft", col=c("orange", "darkred"), c("AI=0.5", "AI=0.65"), bty="n", lwd=1.2, cex=1.6)
+mtext("a", side=3, adj=0, line=1, cex=1.5, font=2)
+
+```
+
+
+NAI dryland
+```{r}
+mean_NAI <- apply(NAI_climate_historical_2x2_allmodels, c(1, 2), mean, na.rm=T)
+
+## Lon/Lat and mask on 2x2:
+lat <- mask_2x2$y
+lon <-  mask_2x2$x
+lowlat <- min(which(lat > -60));highlat <- min(which(lat > 80)); mask <- mask_2x2_NAs
+
+##
+lowlat <- min(which(lat > -60)); 
+highlat <- min(which(lat > 80))
+
+bob <- mean_NAI; bob[bob >4 ] <- 4;
+image.plot(lon-180, lat[lowlat:highlat], bob[ c( (length(lon)/2+1):length(lon),
+1:(length(lon)/2)),lowlat:highlat],  zlim=c(0,4),col=brewer.pal(8, "YlGnBu"), breaks=seq(0,4,by=0.5),
+xlab="", ylab="", xaxt="n", yaxt="n", axis.args=list(cex.axis=1.5), cex.main=1.9,main="Mean NAI and drylands");
+map(add=T,interior=F)
+bob[is.na(bob)==T] <- 1000
+contour(seq(-180,180, length.out=180), seq(lat[lowlat],lat[highlat],length.out=length(lowlat:highlat)),
+bob[ c( (length(lon)/2+1):length(lon), 1:(length(lon)/2)),lowlat:highlat],levels=c(1),
+ col=c("darkred"), lwd=1, add=T, drawlabels=F); 
+map(add=T,interior=F)
+#legend("bottomleft", col=c("darkred"), c("NAI=1"), bty="n", lwd=1.1, cex=1.6)
+mtext("a", side=3, adj=0, line=1, cex=1.5, font=2)
+
+### future
+mean_NAI <- apply(NAI_climate_ssp585_2x2_allmodels, c(1, 2), mean, na.rm=T)
+
+## Lon/Lat and mask on 2x2:
+lat <- mask_2x2$y
+lon <-  mask_2x2$x
+lowlat <- min(which(lat > -60));highlat <- min(which(lat > 80)); mask <- mask_2x2_NAs
+
+##
+lowlat <- min(which(lat > -60)); 
+highlat <- min(which(lat > 80))
+
+bob <- mean_NAI; bob[bob >4 ] <- 4;
+image.plot(lon-180, lat[lowlat:highlat], bob[ c( (length(lon)/2+1):length(lon),
+1:(length(lon)/2)),lowlat:highlat],  zlim=c(0,4),col=brewer.pal(8, "YlGnBu"), breaks=seq(0,4,by=0.5),
+xlab="", ylab="", xaxt="n", yaxt="n", axis.args=list(cex.axis=1.5), cex.main=1.9,main="Mean NAI and drylands");
+map(add=T,interior=F)
+bob[is.na(bob)==T] <- 1000
+contour(seq(-180,180, length.out=180), seq(lat[lowlat],lat[highlat],length.out=length(lowlat:highlat)),
+bob[ c( (length(lon)/2+1):length(lon), 1:(length(lon)/2)),lowlat:highlat],levels=c(1),
+ col=c("darkred"), lwd=1, add=T, drawlabels=F); 
+map(add=T,interior=F)
+#legend("bottomleft", col=c("darkred"), c("NAI=1"), bty="n", lwd=1.1, cex=1.6)
+mtext("a", side=3, adj=0, line=1, cex=1.5, font=2)
+
+
+```
+
+
+```{r}
+
+dryland_fraction_AI <- data.frame(list_models = list_models_common,
+																	historical = rep(NA, length(list_models_common)),
+																	future = rep(NA, length(list_models_common))
+																	)
+
+dryland_fraction_NAI <- data.frame(list_models = list_models_common,
+																	 historical = rep(NA, length(list_models_common)),
+																	 future = rep(NA, length(list_models_common))
+																	)
+	
+for(i in c(1:length(list_models_common))){
+	dryland_fraction_AI$historical[i] <-
+		sum((mask_2x2_NAs*weight)[which(AI_climate_historical_2x2_allmodels[,,i] < 0.65)], na.rm=T)/
+		sum((mask_2x2_NAs*weight), na.rm=T)* 100
+	dryland_fraction_AI$future[i] <-
+		sum((mask_2x2_NAs*weight)[which(AI_climate_ssp585_2x2_allmodels[,,i] < 0.65)], na.rm=T)/
+		sum((mask_2x2_NAs*weight), na.rm=T)* 100
+	
+	dryland_fraction_NAI$historical[i] <-
+		sum((mask_2x2_NAs*weight)[which(NAI_climate_historical_2x2_allmodels[,,i] <= 1)], na.rm=T)/
+		sum((mask_2x2_NAs*weight), na.rm=T)* 100
+	dryland_fraction_NAI$future[i] <-
+		sum((mask_2x2_NAs*weight)[which(NAI_climate_ssp585_2x2_allmodels[,,i] <= 1)], na.rm=T)/
+		sum((mask_2x2_NAs*weight), na.rm=T)* 100
+	
+}
+
+mean(dryland_fraction_AI$future)
+mean(dryland_fraction_AI$historical)	
+mean(dryland_fraction_NAI$future)
+mean(dryland_fraction_NAI$historical)
+
+mean(dryland_fraction_AI$future) - mean(dryland_fraction_AI$historical)
+mean(dryland_fraction_NAI$future)- mean(dryland_fraction_NAI$historical)
+
+```
+
+
+

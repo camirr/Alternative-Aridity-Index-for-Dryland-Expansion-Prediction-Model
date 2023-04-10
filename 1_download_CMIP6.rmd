@@ -1,0 +1,395 @@
+---
+title: "CMIP6 data download"
+output: html_notebook
+---
+
+# Preparation of download
+load library
+```{r}
+library(ecmwfr)
+library(zip)
+library(stringr)
+```
+
+set a key to the keychain
+```{r}
+wf_set_key(user = "29787",
+					 key = "dc47f757-d97f-4ae8-9b00-e893032cb49d",
+					 service = "cds")
+
+```
+
+list of models 
+```{r}
+list_models_common <- c('ACCESS-CM2', 'AWI-CM-1-1-MR','CanESM5-CanOE','CESM2','CMCC-CM2-SR5','CMCC-ESM2',
+												'CNRM-CM6-1',	'CNRM-ESM2-1','E3SM-1-1','FGOALS-f3-L','FGOALS-g3',	'FIO-ESM-2-0', 'GFDL-ESM4',
+												'HadGEM3-GC31-LL','HadGEM3-GC31-MM','INM-CM4-8','INM-CM5-0',	'IPSL-CM6A-LR','KACE-1-0-G',
+												'MIROC6','MIROC-ES2L','MPI-ESM1-2-LR','MRI-ESM2-0','NorESM2-MM','TaiESM1','UKESM1-0-LL')
+
+
+```
+
+# Historical data download
+Make a loop to download all models in list_models_common
+```{r}
+# set direction
+getwd()
+setwd("..")
+getwd()
+
+####################
+### download data ##
+####################
+
+for(m in c(1:length(list_models_common))){
+	## pr: precipitation
+request <- list(
+	format = "zip",
+	temporal_resolution = "monthly",
+	experiment = 'historical',
+	variable = 'precipitation',
+	model = list_models_common[m],
+	year = as.character(c(1971:2000)),
+	month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+	dataset_short_name = "projections-cmip6",
+	target = paste0(list_models_common[m],"_historical_pr.zip")
+)
+wf_request(
+	user = "29787",
+	request = request,
+	transfer = TRUE,
+	path = "./CMIP6_data")
+
+## tas: air temperature
+request <- list(
+	format = "zip",
+	temporal_resolution = "monthly",
+	experiment = 'historical',
+	variable = 'near_surface_air_temperature',
+	model = list_models_common[m],
+	year = as.character(c(1971:2000)),
+	month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+	dataset_short_name = "projections-cmip6",
+	target = paste0(list_models_common[m],"_historical_tas.zip")
+	)
+wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+
+## huss: specific humidity
+request <- list(
+	format = "zip",
+	temporal_resolution = "monthly",
+	experiment = 'historical',
+	variable = 'near_surface_specific_humidity',
+	model = list_models_common[m],
+	year = as.character(c(1971:2000)),
+	month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+	dataset_short_name = "projections-cmip6",
+	target = paste0(list_models_common[m],"_historical_huss.zip")
+)
+wf_request(
+	user = "29787",
+	request = request,
+	transfer = TRUE,
+	path = "./CMIP6_data")
+
+## ps: air pressure
+request <- list(
+	format = "zip",
+	temporal_resolution = "monthly",
+	experiment = 'historical',
+	variable = 'surface_air_pressure',
+	model = list_models_common[m],
+	year = as.character(c(1971:2000)),
+	month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+	dataset_short_name = "projections-cmip6",
+	target = paste0(list_models_common[m],"_historical_ps.zip")
+)
+
+wf_request(
+	user = "29787",
+	request = request,
+	transfer = TRUE,
+	path = "./CMIP6_data")
+
+
+## sfcWind: 10m wind speed
+request <- list(
+	format = "zip",
+	temporal_resolution = "monthly",
+	experiment = 'historical',
+	variable = 'near_surface_wind_speed',
+	model = list_models_common[m],
+	year = as.character(c(1971:2000)),
+	month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+	dataset_short_name = "projections-cmip6",
+	target = paste0(list_models_common[m],"_historical_sfcWind.zip")
+)
+wf_request(
+	user = "29787",
+	request = request,
+	transfer = TRUE,
+	path = "./CMIP6_data")
+
+## hfls: latent heat flux
+request <- list(
+	format = "zip",
+	temporal_resolution = "monthly",
+	experiment = 'historical',
+	variable = 'surface_upward_latent_heat_flux',
+	model = list_models_common[m],
+	year = as.character(c(1971:2000)),
+	month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+	dataset_short_name = "projections-cmip6",
+	target = paste0(list_models_common[m],"_historical_hfls.zip")
+)
+wf_request(
+	user = "29787",
+	request = request,
+	transfer = TRUE,
+	path = "./CMIP6_data")
+
+## hfss: sensible heat flux
+request <- list(
+	format = "zip",
+	temporal_resolution = "monthly",
+	experiment = 'historical',
+	variable = 'surface_upward_sensible_heat_flux',
+	model = list_models_common[m],
+	year = as.character(c(1971:2000)),
+	month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+	dataset_short_name = "projections-cmip6",
+	target = paste0(list_models_common[m],"_historical_hfss.zip")
+)
+wf_request(
+	user = "29787",
+	request = request,
+	transfer = TRUE,
+	path = "./CMIP6_data")
+	
+}
+
+
+
+```
+
+
+# Future data download
+write a script for this: (change experiment to ssp5_8_5, change year)
+```{r}
+# set direction
+getwd()
+setwd("..")
+getwd()
+
+####################
+### download data ##
+####################
+
+for(m in c(1:length(list_models_common))){
+	print(m)
+	## pr: precipitation
+	request <- list(
+		format = "zip",
+		temporal_resolution = "monthly",
+		experiment = 'ssp5_8_5',
+		variable = 'precipitation',
+		model = list_models_common[m],
+		year = as.character(c(2071:2100)),
+		month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_common[m],"_ssp585_pr.zip")
+		)
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+	
+	## tas: near_surface_air_temperature
+	request <- list(
+		format = "zip",
+		temporal_resolution = "monthly",
+		experiment = 'ssp5_8_5',
+		variable = 'near_surface_air_temperature',
+		model = list_models_common[m],
+		year = as.character(c(2071:2100)),
+		month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_common[m],"_ssp585_tas.zip")
+		)
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+	
+	## ps: surface_air_pressure
+	request <- list(
+		format = "zip",
+		temporal_resolution = "monthly",
+		experiment = 'ssp5_8_5',
+		variable = 'surface_air_pressure',
+		model = list_models_common[m],
+		year = as.character(c(2071:2100)),
+		month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_common[m],"_ssp585_ps.zip")
+		)
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+	
+	## huss: near_surface_specific_humidity
+	request <- list(
+		format = "zip",
+		temporal_resolution = "monthly",
+		experiment = 'ssp5_8_5',
+		variable = 'near_surface_specific_humidity',
+		model = list_models_common[m],
+		year = as.character(c(2071:2100)),
+		month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_common[m],"_ssp585_huss.zip")
+		)
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+	
+	## sfcWind: near_surface_wind_speed
+	request <- list(
+		format = "zip",
+		temporal_resolution = "monthly",
+		experiment = 'ssp5_8_5',
+		variable = 'near_surface_wind_speed',
+		model = list_models_common[m],
+		year = as.character(c(2071:2100)),
+		month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_common[m],"_ssp585_sfcWind.zip")
+		)
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+	
+	## hfss: surface_upward_sensible_heat_flux
+	request <- list(
+		format = "zip",
+		temporal_resolution = "monthly",
+		experiment = 'ssp5_8_5',
+		variable = 'surface_upward_sensible_heat_flux',
+		model = list_models_common[m],
+		year = as.character(c(2071:2100)),
+		month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_common[m],"_ssp585_hfss.zip")
+		)
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+	
+	## hfls: surface_upward_latent_heat_flux
+	request <- list(
+		format = "zip",
+		temporal_resolution = "monthly",
+		experiment = 'ssp5_8_5',
+		variable = 'surface_upward_latent_heat_flux',
+		model = list_models_common[m],
+		year = as.character(c(2071:2100)),
+		month = c('01','02','03','04','05','06','07','08','09','10','11','12'),
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_common[m],"_ssp585_hfls.zip")
+		)
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+	
+}
+
+
+```
+
+
+# Fixed data (land fraction) download
+```{r}
+# set direction
+getwd()
+setwd("..")
+getwd()
+
+####################
+### download data ##
+####################
+
+list_models_sftlf <- c('ACCESS-CM2','ACCESS-ESM1-5', 'AWI-CM-1-1-MR','AWI-ESM-1-1-LR', 'CanESM5','CanESM5-CanOE',
+											 'CESM2','CESM2-FV2','CESM2-WACCM','CESM2-WACCM-FV2','CMCC-CM2-HR4','CMCC-CM2-SR5','CMCC-ESM2',
+											 'EC-Earth3-AerChem', 'EC-Earth3-Veg-LR','FGOALS-g3','INM-CM4-8','INM-CM5-0','MIROC6',
+											 'MIROC-ES2L','MPI-ESM1-2-HR','MPI-ESM1-2-LR','MRI-ESM2-0','NorCPM1','SAM0-UNICON','TaiESM1')
+
+list_models_sftlf_common <- list_models_sftlf[which(list_models_sftlf %in% list_models_common)]
+
+
+for(m in c(1:length(list_models_sftlf_common))){
+	print(m)
+	request <- list(
+		format = "zip",
+		temporal_resolution = "fixed",
+		experiment = 'historical',
+		variable = 'percentage_of_the_grid_cell_occupied_by_land_including_lakes',
+		model = list_models_sftlf_common[m],
+		dataset_short_name = "projections-cmip6",
+		target = paste0(list_models_sftlf_common[m],"_sftlf.zip")
+	)
+	
+	wf_request(
+		user = "29787",
+		request = request,
+		transfer = TRUE,
+		path = "./CMIP6_data")
+}
+
+```
+
+
+# extract zip
+```{r}
+# set direction
+getwd()
+setwd("..")
+setwd("./CMIP6_data")
+getwd()
+
+# output path
+outputpath <- paste0(getwd(),"/","netcdf")
+
+# path for .zip files
+path <- getwd()
+all.files <- list.files()
+all.files[!file.info(all.files)$isdir]
+zip <- paste0(path,"/",all.files)
+
+# unzip
+for (i in 1:length(zip)){
+	if(str_ends(zip[i],".zip")){
+		unzip(zip[i], exdir=outputpath)
+	}
+}
+
+```
+
+
+
+
